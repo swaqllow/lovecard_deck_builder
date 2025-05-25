@@ -112,22 +112,101 @@ class MemberCard extends BaseCard {
   }
 
   // fromMapコンストラクタも修正
-  MemberCard.fromMap(Map<String, dynamic> map)
-    : cost = map['cost'] ?? 0,
-      hearts = _parseHearts(map['hearts']), 
-      blades = map['blades'] ?? 0,
-      bladeHearts = _parseBladeHearts(map['bladeHearts'] ?? map['blade_hearts']),
-      effect = map['effect'] ?? '',
-      super(
-        id: map['id'] ?? 0,
-        cardCode: map['card_code'] ?? '',
-        rarity: _parseRarity(map['rarity']),    // Rarity enumパース
-        productSet: map['product_set'] ?? '',
-        name: map['name'] ?? '',
-        series: _parseSeriesName(map['series']),
-        unit: _parseUnitName(map['unit']),
-        imageUrl: map['image_url'] ?? '',
+factory MemberCard.fromMap(Map<String, dynamic> map) {
+  print('=== MemberCard.fromMap 開始 ===');
+  print('Input map: $map');
+  
+  try {
+    // ✅ 安全なレアリティ変換
+    Rarity rarity = Rarity.n; // デフォルト値
+    try {
+      final rarityStr = map['rarity'] as String? ?? 'N';
+      rarity = Rarity.fromString(rarityStr);
+    } catch (e) {
+      rarity = Rarity.n;
+    }
+
+    // ✅ 安全なシリーズ変換
+    SeriesName series = SeriesName.lovelive; // デフォルト値
+    try {
+      final seriesStr = map['series'] as String? ?? 'lovelive';
+      series = SeriesName.values.firstWhere(
+        (s) => s.name == seriesStr,
+        orElse: () => SeriesName.lovelive,
       );
+    } catch (e) {
+      series = SeriesName.lovelive;
+    }
+
+    // ✅ 安全なユニット変換
+    UnitName? unit;
+    try {
+      final unitStr = map['unit'] as String?;
+      if (unitStr != null && unitStr.isNotEmpty) {
+        unit = UnitName.values.firstWhere(
+          (u) => u.name == unitStr,
+          orElse: () => UnitName.none,
+        );
+      }
+    } catch (e) {
+      unit = null;
+    }
+
+    // ✅ ハートの安全な変換
+    List<Heart> hearts = [];
+    try {
+      hearts = _parseHearts(map['hearts']);
+    } catch (e) {
+      hearts = [];
+    }
+
+    // ✅ ブレードハートの安全な変換
+    BladeHeart bladeHearts = BladeHeart(quantities: {});
+    try {
+      bladeHearts = _parseBladeHearts(map['blade_hearts']);
+    } catch (e) {
+      bladeHearts = BladeHeart(quantities: {});
+    }
+
+    final result = MemberCard(
+      id: map['id'] ?? 0,
+      cardCode: map['card_code'] ?? '',
+      rarity: rarity,              // ✅ 確実にnon-null
+      productSet: map['product_set'] ?? '',
+      name: map['name'] ?? 'Unknown Card',
+      series: series,              // ✅ 確実にnon-null
+      unit: unit,                  // ✅ nullの可能性あり（nullable）
+      imageUrl: map['image_url'] ?? '',
+      cost: map['cost'] ?? 0,
+      hearts: hearts,              // ✅ 確実にnon-null（空リストの可能性）
+      blades: map['blades'] ?? 0,
+      bladeHearts: bladeHearts,    // ✅ 確実にnon-null（空オブジェクト）
+      effect: map['effect'] ?? '',
+    );
+    return result;
+
+  } catch (e, stackTrace) {
+    print('❌ MemberCard.fromMap 致命的エラー: $e');
+    print('スタックトレース: $stackTrace');
+    
+    // ✅ エラー時のフォールバック：最小限の有効なオブジェクトを返す
+    return MemberCard(
+      id: map['id'] ?? 0,
+      cardCode: 'ERROR-CARD',
+      rarity: Rarity.n,
+      productSet: 'Error',
+      name: 'Error Card',
+      series: SeriesName.lovelive,
+      unit: null,
+      imageUrl: '',
+      cost: 0,
+      hearts: [],
+      blades: 0,
+      bladeHearts: BladeHeart(quantities: {}),
+      effect: 'Error occurred during loading',
+    );
+  }
+}
   
   // レアリティパースヘルパー（新規追加）
   static Rarity _parseRarity(dynamic rarityData) {
@@ -147,9 +226,6 @@ class MemberCard extends BaseCard {
   
   // 既存のヘルパーメソッドはそのまま維持
   static List<Heart> _parseHearts(dynamic heartsData) {
-    print('=== Hearts解析開始 ===');
-    print('入力データ: $heartsData');
-    print('データ型: ${heartsData.runtimeType}');
     
     if (heartsData == null) {
       print('heartsData is null');
@@ -159,68 +235,51 @@ class MemberCard extends BaseCard {
     try {
       // 文字列からパース（JSON文字列の場合）
       if (heartsData is String) {
-        print('JSON文字列からパース');
         final decoded = jsonDecode(heartsData);
-        print('デコード結果: $decoded');
         return _parseHearts(decoded);  // 再帰処理
       }
       
       // 既にListの場合
       if (heartsData is List) {
-        print('Listからパース: ${heartsData.length}個');
         final result = heartsData.map((heart) {
-          print('単一ハート処理: $heart (型: ${heart.runtimeType})');
           
           if (heart is Map) {
             final colorValue = heart['color'] ?? heart['colorName'];
             final color = _parseHeartColor(colorValue);
-            print('  -> 色: $color');
             return Heart(color: color);
           } else if (heart is String) {
             // 文字列の場合（例: "HeartColor.red"）
             final color = _parseHeartColor(heart);
-            print('  -> 色: $color');
             return Heart(color: color);
           }
           return Heart(color: HeartColor.any);
         }).toList();
         
-        print('パース結果: ${result.length}個のハート');
         return result;
       }
       
       // Mapの場合（色->数量）
       if (heartsData is Map) {
-        print('Mapからパース');
         final List<Heart> hearts = [];
         heartsData.forEach((key, value) {
-          print('処理中: $key -> $value');
           final color = _parseHeartColor(key.toString());
           final count = value is int ? value : int.tryParse(value.toString()) ?? 0;
-          print('  -> 色: $color, 数: $count');
           
           for (int i = 0; i < count; i++) {
             hearts.add(Heart(color: color));
           }
         });
-        print('Mapパース結果: ${hearts.length}個のハート');
         return hearts;
       }
       
     } catch (e, stackTrace) {
-      print('ハートパースエラー: $e');
-      print('スタックトレース: $stackTrace');
     }
     
-    print('デフォルト値を返す');
     return [];
   }
   
   // bladeHeartsパース処理の修正
   static BladeHeart _parseBladeHearts(dynamic bladeData) {
-    print('=== BladeHearts解析開始 ===');
-    print('入力データ: $bladeData');
-    print('データ型: ${bladeData.runtimeType}');
     
     if (bladeData == null) {
       print('bladeData is null');
@@ -230,15 +289,12 @@ class MemberCard extends BaseCard {
     try {
       // 文字列からパース
       if (bladeData is String) {
-        print('JSON文字列からパース');
         final decoded = jsonDecode(bladeData);
-        print('デコード結果: $decoded');
         return _parseBladeHearts(decoded);  // 再帰処理
       }
       
       // Map形式
        if (bladeData is Map) {
-        print('Mapからパース');
         final Map<BladeHeartColor, int> quantities = {};
         
         // quantitiesキーがある場合はその中身を処理
@@ -251,33 +307,25 @@ class MemberCard extends BaseCard {
               
               if (color != null) {
                 quantities[color] = quantity;
-                print('  -> 追加: $color x $quantity');
               }
             });
           } else {
-            print('  -> 空のquantitiesマップ、デフォルト値は追加しない');
           }
         }
     
     final result = BladeHeart(quantities: quantities);
-    print('Mapパース結果: ${quantities.keys.join(', ')}');
     return result;
   }
       
     } catch (e, stackTrace) {
-      print('ブレードハートパースエラー: $e');
-      print('スタックトレース: $stackTrace');
     }
     
-    print('デフォルト値を返す');
     return BladeHeart(quantities: {});
   }
   
   // HeartColorパースヘルパー
 static HeartColor _parseHeartColor(String? colorStr) {
   if (colorStr == null) return HeartColor.any;
-  
-  print('HeartColor解析: $colorStr');
   
   // カラーを小文字に統一して比較
   final color = colorStr.toLowerCase();
@@ -303,7 +351,6 @@ static HeartColor _parseHeartColor(String? colorStr) {
   static BladeHeartColor? _parseBladeHeartColor(String? colorStr) {
     if (colorStr == null) return null;
     
-    print('BladeHeartColor解析: $colorStr');
     
     try {
       return BladeHeartColor.values.firstWhere(
@@ -311,7 +358,6 @@ static HeartColor _parseHeartColor(String? colorStr) {
         orElse: () => BladeHeartColor.normalPink,  
       );
     } catch (e) {
-      print('BladeHeartColor解析失敗: $e');
       return null;
     }
   }

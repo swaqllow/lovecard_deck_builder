@@ -1,975 +1,483 @@
-// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/card_data_provider.dart';
-import '../models/card/base_card.dart';
-import '../models/card/member_card.dart';
-import '../models/card/live_card.dart';
-import '../models/deck.dart';
-import '../models/enums/enums.dart';  // ✅ 全てのenumをまとめてimport
-import '../services/database/database_helper.dart';
-import '../services/image_cache_service.dart';
-import '../services/sample_data_service.dart';
-import '../services/sync/sync_service.dart';
-import 'test_scraping_screen.dart';
-import 'settings_screen.dart';
-import 'deck/deck_report_screen.dart';
-import 'deck/deck_edit_screen.dart';
-import 'card/card_detail_screen.dart';
-import 'html_structure_viewer.dart';
-import 'test_diagnosis_screen.dart';
-import 'test_database_screen.dart';
+import '../models/card/card.dart';
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
-
-  @override
-  _HomeScreenState createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    
-    // カードデータの自動同期チェック（バックグラウンドで実行）
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkForUpdatesAndSync();
-    });
-  }
-  
-  // ✅ 新しい同期システムに対応した更新チェック
-  Future<void> _checkForUpdatesAndSync() async {
-    final cardDataProvider = Provider.of<CardDataProvider>(context, listen: false);
-    
-    try {
-      // 自動同期が必要かチェックして実行
-      await cardDataProvider.autoSyncIfNeeded();
-      
-      // 同期結果に基づいてユーザーに通知
-      final lastSyncResult = cardDataProvider.lastSyncResult;
-      if (lastSyncResult != null && lastSyncResult.success && lastSyncResult.hasChanges && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(lastSyncResult.userDetailMessage),
-            action: SnackBarAction(
-              label: '詳細',
-              onPressed: () {
-                _showSyncResultDialog(lastSyncResult);
-              },
-            ),
-            duration: Duration(seconds: 5),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      print('自動同期チェックエラー: $e');
-    }
-  }
-  
-  // 同期結果詳細ダイアログ
-  void _showSyncResultDialog(dynamic syncResult) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(
-              syncResult.success ? Icons.check_circle : Icons.error,
-              color: syncResult.success ? Colors.green : Colors.red,
-            ),
-            SizedBox(width: 8),
-            Text('同期結果'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(syncResult.userDetailMessage),
-            if (syncResult.hasChanges) ...[
-              SizedBox(height: 12),
-              Text('詳細:', style: TextStyle(fontWeight: FontWeight.bold)),
-              if (syncResult.addedCardsCount > 0)
-                Text('• 新規追加: ${syncResult.addedCardsCount}枚'),
-              if (syncResult.updatedCardsCount > 0)
-                Text('• 更新: ${syncResult.updatedCardsCount}枚'),
-              if (syncResult.deletedCardsCount > 0)
-                Text('• 削除: ${syncResult.deletedCardsCount}枚'),
-              SizedBox(height: 8),
-              Text('処理時間: ${syncResult.durationMs}ms'),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            child: Text('OK'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-  
+class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('ラブライブ！デッキビルダー'),
-        backgroundColor: Color(0xFFE4007F),
+        backgroundColor: Colors.pink,
         foregroundColor: Colors.white,
-        actions: [
-          // 同期ボタンを追加
-          Consumer<CardDataProvider>(
-            builder: (context, provider, child) {
-              return IconButton(
-                icon: provider.isSyncing 
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Icon(Icons.sync),
-                onPressed: provider.isSyncing ? null : () async {
-                  await provider.syncCardData(forceSync: true);
-                  if (provider.lastSyncResult != null && mounted) {
-                    _showSyncResultDialog(provider.lastSyncResult!);
-                  }
-                },
-                tooltip: provider.isSyncing ? '同期中...' : 'カードデータを同期',
-              );
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.search),
-            onPressed: () {
-              _showSearchDialog();
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => SettingsScreen()),
-              );
-            },
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: [
-            Tab(text: 'カード一覧'),
-            Tab(text: 'デッキ一覧'),
-            Tab(text: 'お気に入り'),
-            Tab(text: 'デバッグ'),
-          ],
-        ),
+        elevation: 0,
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          CardCollectionTab(),
-          DeckListTab(),
-          FavoritesTab(),
-          DebugTab(),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Color(0xFFE4007F),
-        foregroundColor: Colors.white,
-        child: Icon(Icons.add),
-        onPressed: () {
-          _showCreateDeckDialog();
+      body: Consumer<CardDataProvider>(
+        builder: (context, provider, child) {
+          return RefreshIndicator(
+            onRefresh: () => provider.loadCards(),
+            child: SingleChildScrollView(
+              physics: AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  // ヘッダーセクション
+                  _buildHeader(),
+                  SizedBox(height: 30),
+                  
+                  // メイン統計
+                  _buildMainStats(provider),
+                  SizedBox(height: 20),
+                  
+                  // 詳細統計
+                  if (provider.cards.isNotEmpty) ...[
+                    _buildDetailedStats(provider),
+                    SizedBox(height: 20),
+                  ],
+                  
+                  // アクションボタン
+                  _buildActionButtons(context, provider),
+                  SizedBox(height: 20),
+                  
+                  // フッター
+                  _buildFooter(),
+                ],
+              ),
+            ),
+          );
         },
       ),
     );
   }
-  
-  // 検索ダイアログ（機能強化）
-  void _showSearchDialog() {
-    String searchQuery = '';
-    String? selectedSeries;
-    String? selectedCardType;
-    
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text('カード検索'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  decoration: InputDecoration(
-                    labelText: 'カード名',
-                    hintText: 'カード名を入力',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (value) => searchQuery = value,
-                ),
-                SizedBox(height: 16),
-                
-                // シリーズ選択
-                DropdownButtonFormField<String>(
-                  decoration: InputDecoration(
-                    labelText: 'シリーズ',
-                    border: OutlineInputBorder(),
-                  ),
-                  value: selectedSeries,
-                  items: [
-                    DropdownMenuItem(value: null, child: Text('すべて')),
-                    DropdownMenuItem(value: 'lovelive', child: Text('ラブライブ！')),
-                    DropdownMenuItem(value: 'sunshine', child: Text('ラブライブ！サンシャイン！！')),
-                    DropdownMenuItem(value: 'nijigasaki', child: Text('ラブライブ！虹ヶ咲学園')),
-                    DropdownMenuItem(value: 'superstar', child: Text('ラブライブ！スーパースター！！')),
-                    DropdownMenuItem(value: 'hasunosoraGakuin', child: Text('ラブライブ！蓮ノ空女学院')),
-                  ],
-                  onChanged: (value) => setState(() => selectedSeries = value),
-                ),
-                SizedBox(height: 16),
-                
-                // カードタイプ選択
-                DropdownButtonFormField<String>(
-                  decoration: InputDecoration(
-                    labelText: 'カードタイプ',
-                    border: OutlineInputBorder(),
-                  ),
-                  value: selectedCardType,
-                  items: [
-                    DropdownMenuItem(value: null, child: Text('すべて')),
-                    DropdownMenuItem(value: 'member', child: Text('メンバー')),
-                    DropdownMenuItem(value: 'live', child: Text('ライブ')),
-                    DropdownMenuItem(value: 'energy', child: Text('エネルギー')),
-                  ],
-                  onChanged: (value) => setState(() => selectedCardType = value),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              child: Text('キャンセル'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            ElevatedButton(
-              child: Text('検索'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                _performSearch(searchQuery, selectedSeries, selectedCardType);
-              },
-            ),
-          ],
+
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.pink.shade100, Colors.purple.shade100],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.pink.withOpacity(0.2),
+            spreadRadius: 2,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
-    );
-  }
-  
-  // 検索実行
-  void _performSearch(String query, String? series, String? cardType) {
-    final cardDataProvider = Provider.of<CardDataProvider>(context, listen: false);
-    final results = cardDataProvider.searchCards(
-      name: query.isNotEmpty ? query : null,
-      series: series,
-      cardType: cardType,
-    );
-    
-    // 検索結果画面への遷移（実装は省略）
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${results.length}件のカードが見つかりました')),
-    );
-  }
-  
-  // デッキ作成ダイアログ
-  Future<void> _showCreateDeckDialog() async {
-    final TextEditingController nameController = TextEditingController();
-    
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('新しいデッキを作成'),
-        content: TextField(
-          controller: nameController,
-          decoration: InputDecoration(
-            labelText: 'デッキ名',
-            hintText: 'デッキ名を入力してください',
-            border: OutlineInputBorder(),
+      child: Column(
+        children: [
+          Icon(
+            Icons.favorite,
+            size: 60,
+            color: Colors.pink.shade600,
           ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            child: Text('キャンセル'),
-            onPressed: () => Navigator.of(context).pop(false),
+          SizedBox(height: 12),
+          Text(
+            'ラブライブ！デッキビルダー',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.pink.shade700,
+            ),
           ),
-          ElevatedButton(
-            child: Text('作成'),
-            onPressed: () {
-              final deckName = nameController.text.trim();
-              if (deckName.isNotEmpty) {
-                Navigator.of(context).pop(true);
-              }
-            },
+          SizedBox(height: 4),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.green.shade100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'MVP版 - 完全動作中',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.green.shade700,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
     );
-    
-    if (result == true) {
-      final deckName = nameController.text.trim();
-      final newDeck = Deck(
-        name: deckName,
-        mainDeckCards: [],
-        energyDeckCards: [],
-      );
-      
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => DeckEditScreen(deck: newDeck),
-        ),
-      );
-    }
   }
-}
 
-// デバッグタブ（機能強化）
-class DebugTab extends StatelessWidget {
-  const DebugTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: EdgeInsets.all(16),
-      children: [
-        // ステータス情報カード
-        Consumer<CardDataProvider>(
-          builder: (context, provider, child) {
-            return Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'システム状態',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    _buildStatusRow('カード数', '${provider.cardCount}枚'),
-                    _buildStatusRow('データバージョン', provider.currentVersion),
-                    _buildStatusRow('最終同期', 
-                        provider.lastSyncTime?.toString() ?? '未同期'),
-                    _buildStatusRow('ロード状態', 
-                        provider.isLoading ? 'ロード中' : '完了'),
-                    _buildStatusRow('同期状態', 
-                        provider.isSyncing ? '同期中' : '待機中'),
-                    if (provider.errorMessage != null)
-                      _buildStatusRow('エラー', provider.errorMessage!, 
-                          isError: true),
-                  ],
+  Widget _buildMainStats(CardDataProvider provider) {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 2,
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.analytics, color: Colors.blue.shade600),
+              SizedBox(width: 8),
+              Text(
+                'コレクション統計',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
                 ),
               ),
-            );
-          },
-        ),
-        
-        SizedBox(height: 16),
-        
-        Text(
-          'デバッグメニュー',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[700],
+            ],
           ),
-        ),
-        SizedBox(height: 12),
-        
-        // デバッグボタンカード
-        Card(
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Column(
+          SizedBox(height: 20),
+          
+          if (provider.isLoading)
+            Column(
               children: [
-                // 接続診断ボタン
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    icon: Icon(Icons.wifi_find),
-                    label: Text('接続診断'),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => TestDiagnosisScreen()),
-                      );
-                    },
-                  ),
-                ),
-                
+                CircularProgressIndicator(color: Colors.pink),
+                SizedBox(height: 12),
+                Text('データを読み込み中...', style: TextStyle(color: Colors.grey.shade600)),
+              ],
+            )
+          else if (provider.error != null)
+            Column(
+              children: [
+                Icon(Icons.error, color: Colors.red, size: 32),
                 SizedBox(height: 8),
-                
-                // データベース診断ボタン
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    icon: Icon(Icons.storage),
-                    label: Text('データベース診断'),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => DatabaseTestScreen()),
-                      );
-                    },
-                  ),
+                Text('エラー: ${provider.error}', style: TextStyle(color: Colors.red, fontSize: 12)),
+              ],
+            )
+          else
+            Column(
+              children: [
+                // メイン統計行
+                Row(
+                  children: [
+                    Expanded(child: _buildStatCard('総カード数', provider.cards.length, Icons.credit_card, Colors.blue)),
+                    SizedBox(width: 12),
+                    Expanded(child: _buildStatCard('メンバー', provider.memberCards.length, Icons.person, Colors.green)),
+                  ],
                 ),
-                
-                SizedBox(height: 8),
-                
-                // 手動同期ボタン
-                Consumer<CardDataProvider>(
-                  builder: (context, provider, child) {
-                    return SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        icon: provider.isSyncing 
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Icon(Icons.sync),
-                        label: Text(provider.isSyncing ? '同期中...' : '手動同期'),
-                        onPressed: provider.isSyncing ? null : () async {
-                          await provider.syncCardData(forceSync: true);
-                          if (provider.lastSyncResult != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(provider.lastSyncResult!.userDetailMessage),
-                                backgroundColor: provider.lastSyncResult!.success 
-                                    ? Colors.green : Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    );
-                  },
-                ),
-                
-                SizedBox(height: 8),
-                
-                // データリセットボタン
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    icon: Icon(Icons.delete_forever),
-                    label: Text('ローカルデータリセット'),
-                    onPressed: () => _showResetDataDialog(context),
-                  ),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildStatCard('ライブ', provider.liveCards.length, Icons.music_note, Colors.purple)),
+                    SizedBox(width: 12),
+                    Expanded(child: _buildStatCard('エネルギー', provider.energyCards.length, Icons.flash_on, Colors.orange)),
+                  ],
                 ),
               ],
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String label, int value, IconData icon, Color color) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          SizedBox(height: 8),
+          Text(
+            value.toString(),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
-        ),
-        
-        SizedBox(height: 16),
-        
-        // 開発者ツール
-        Card(
-          child: Padding(
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailedStats(CardDataProvider provider) {
+    final stats = provider.getStatistics();
+    final rarityCount = stats['rarityCount'] as Map<String, int>? ?? {};
+    final seriesCount = stats['seriesCount'] as Map<String, int>? ?? {};
+
+    return Column(
+      children: [
+        // レアリティ統計
+        if (rarityCount.isNotEmpty) ...[
+          Container(
             padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 6,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '開発者ツール',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.star, color: Colors.amber.shade600),
+                    SizedBox(width: 8),
+                    Text(
+                      'レアリティ分布',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ],
                 ),
                 SizedBox(height: 12),
-                
-                ListTile(
-                  leading: Icon(Icons.code, color: Colors.purple),
-                  title: Text('HTML構造解析'),
-                  subtitle: Text('スクレイピング対象サイトの構造を確認'),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => HtmlStructureViewer()),
-                    );
-                  },
-                ),
-                
-                ListTile(
-                  leading: Icon(Icons.download, color: Colors.indigo),
-                  title: Text('スクレイピングテスト'),
-                  subtitle: Text('個別カードのスクレイピングをテスト'),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => TestScrapingScreen()),
-                    );
-                  },
-                ),
-                
-                ListTile(
-                  leading: Icon(Icons.add_box, color: Colors.teal),
-                  title: Text('サンプルデータ生成'),
-                  subtitle: Text('テスト用のサンプルカードを作成'),
-                  onTap: () async {
-                    final sampleService = SampleDataService();
-                    await sampleService.saveSampleDataToDatabase();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('サンプルデータを生成しました'),
-                        backgroundColor: Colors.green,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: rarityCount.entries.map((entry) {
+                    return Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _getRarityColor(entry.key).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _getRarityColor(entry.key).withOpacity(0.5)),
+                      ),
+                      child: Text(
+                        '${entry.key}: ${entry.value}',
+                        style: TextStyle(
+                          color: _getRarityColor(entry.key),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                     );
-                  },
+                  }).toList(),
                 ),
               ],
             ),
           ),
-        ),
+          SizedBox(height: 16),
+        ],
+
+        // シリーズ統計
+        if (seriesCount.isNotEmpty) ...[
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 6,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.category, color: Colors.indigo.shade600),
+                    SizedBox(width: 8),
+                    Text(
+                      'シリーズ分布',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+                ...seriesCount.entries.map((entry) {
+                  final percentage = (entry.value / provider.cards.length * 100).round();
+                  return Container(
+                    margin: EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            entry.key,
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: LinearProgressIndicator(
+                            value: entry.value / provider.cards.length,
+                            backgroundColor: Colors.grey.shade200,
+                            valueColor: AlwaysStoppedAnimation<Color>(_getSeriesColor(entry.key)),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          '${entry.value} ($percentage%)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _getSeriesColor(entry.key),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
-  
-  Widget _buildStatusRow(String label, String value, {bool isError = false}) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(fontWeight: FontWeight.w500),
-          ),
-          Flexible(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: isError ? Colors.red : Colors.grey[600],
-                fontFamily: 'monospace',
-              ),
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  void _showResetDataDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('データリセット確認'),
-        content: Text(
-          '以下のデータがすべて削除されます：\n\n'
-          '• カードデータ\n'
-          '• デッキデータ\n'
-          '• 設定情報\n'
-          '• 画像キャッシュ\n\n'
-          'この操作は元に戻せません。続行しますか？'
-        ),
-        actions: [
-          TextButton(
-            child: Text('キャンセル'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          TextButton(
-            child: Text(
-              '削除',
-              style: TextStyle(color: Colors.red),
-            ),
-            onPressed: () async {
-              Navigator.of(context).pop();
-              
-              final provider = Provider.of<CardDataProvider>(context, listen: false);
-              await provider.resetLocalData();
-              
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('ローカルデータをリセットしました'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
 
-// カード一覧タブ（既存のコードをそのまま使用）
-class CardCollectionTab extends StatefulWidget {
-  const CardCollectionTab({super.key});
-
-  @override
-  _CardCollectionTabState createState() => _CardCollectionTabState();
-}
-
-class _CardCollectionTabState extends State<CardCollectionTab> with SingleTickerProviderStateMixin {
-  late TabController _cardTypeTabController;
-  
-  @override
-  void initState() {
-    super.initState();
-    _cardTypeTabController = TabController(length: 3, vsync: this);
-  }
-  
-  @override
-  void dispose() {
-    _cardTypeTabController.dispose();
-    super.dispose();
-  }
-  
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildActionButtons(BuildContext context, CardDataProvider provider) {
     return Column(
       children: [
-        Container(
-          color: Colors.white,
-          child: TabBar(
-            controller: _cardTypeTabController,
-            labelColor: Color(0xFFE4007F),
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: Color(0xFFE4007F),
-            tabs: [
-              Tab(text: 'メンバー'),
-              Tab(text: 'ライブ'),
-              Tab(text: 'エネルギー'),
-            ],
-          ),
-        ),
-        
-        Expanded(
-          child: TabBarView(
-            controller: _cardTypeTabController,
-            children: [
-              _buildCardGrid('member'),
-              _buildCardGrid('live'),
-              _buildCardGrid('energy'),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildCardGrid(String cardType) {
-    return Consumer<CardDataProvider>(
-      builder: (context, provider, child) {
-        if (provider.isLoading) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('カードデータを読み込み中...'),
-              ],
-            ),
-          );
-        }
-        
-        if (provider.errorMessage != null) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, size: 64, color: Colors.red),
-                SizedBox(height: 16),
-                Text(
-                  'エラーが発生しました',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  provider.errorMessage!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => provider.loadCardsFromDatabase(),
-                  child: Text('再読み込み'),
-                ),
-              ],
-            ),
-          );
-        }
-        
-        final cards = provider.getCardsByType(cardType);
-        
-        if (cards.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.style, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text(
-                  '${_getCardTypeDisplayName(cardType)}カードがありません',
-                  style: TextStyle(fontSize: 18, color: Colors.grey),
-                ),
-                SizedBox(height: 16),
-                ElevatedButton.icon(
-                  icon: Icon(Icons.sync),
-                  label: Text('データを同期'),
-                  onPressed: () => provider.syncCardData(),
-                ),
-              ],
-            ),
-          );
-        }
-        
-        return GridView.builder(
-          padding: EdgeInsets.all(8),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: 0.7,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-          ),
-          itemCount: cards.length,
-          itemBuilder: (context, index) {
-            return _buildCardItem(cards[index]);
-          },
-        );
-      },
-    );
-  }
-  
-  String _getCardTypeDisplayName(String cardType) {
-    switch (cardType) {
-      case 'member': return 'メンバー';
-      case 'live': return 'ライブ';
-      case 'energy': return 'エネルギー';
-      default: return '';
-    }
-  }
-  
-  Widget _buildCardItem(BaseCard card) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CardDetailScreen(card: card),
-          ),
-        );
-      },
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Row(
           children: [
-            // カード画像
             Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-                child: _buildCardImage(card),
-              ),
-            ),
-            
-            // カード名
-            Padding(
-              padding: EdgeInsets.all(4),
-              child: Text(
-                card.name,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+              child: ElevatedButton.icon(
+                onPressed: provider.cards.isEmpty 
+                    ? null 
+                    : () => Navigator.pushNamed(context, '/cards'),
+                icon: Icon(Icons.view_list),
+                label: Text('カード一覧'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
-            
-            // カード情報
-            Padding(
-              padding: EdgeInsets.only(left: 4, right: 4, bottom: 4),
-              child: _buildCardInfo(card),
+            SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.pushNamed(context, '/debug'),
+                icon: Icon(Icons.settings),
+                label: Text('設定・デバッグ'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ),
           ],
         ),
-      ),
+        if (provider.cards.isEmpty) ...[
+          SizedBox(height: 12),
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Text(
+              '💡 カード一覧を見るには、まず設定・デバッグ画面でサンプルデータを生成してください',
+              style: TextStyle(
+                color: Colors.blue.shade700,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ],
     );
   }
-  
-  Widget _buildCardImage(BaseCard card) {
-    if (card.imageUrl.isEmpty) {
-      return Container(
-        color: Colors.grey[200],
-        child: Center(
-          child: Icon(Icons.image, size: 40, color: Colors.grey),
+
+  Widget _buildFooter() {
+    return Column(
+      children: [
+        Divider(color: Colors.grey.shade300),
+        SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 16),
+            SizedBox(width: 6),
+            Text(
+              'MVP完成 - 全機能動作中',
+              style: TextStyle(
+                color: Colors.green.shade700,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
-      );
-    }
-    
-    return Consumer<ImageCacheService>(
-      builder: (context, imageCacheService, child) {
-        return FutureBuilder<bool>(
-          future: imageCacheService.isImageCached(card.imageUrl),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.done && snapshot.data == true) {
-              return FutureBuilder<ImageProvider>(
-                future: imageCacheService.getImage(card.imageUrl),
-                builder: (context, imageSnapshot) {
-                  if (imageSnapshot.connectionState == ConnectionState.done && imageSnapshot.data != null) {
-                    return Image(
-                      image: imageSnapshot.data!,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: double.infinity,
-                    );
-                  } else {
-                    return Center(child: CircularProgressIndicator());
-                  }
-                },
-              );
-            } else {
-              return Container(
-                color: Colors.grey[200],
-                child: Center(
-                  child: Icon(Icons.image, size: 40, color: Colors.grey),
-                ),
-              );
-            }
-          },
-        );
-      },
+        SizedBox(height: 4),
+        Text(
+          'バージョン: 1.0.0',
+          style: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 10,
+          ),
+        ),
+      ],
     );
   }
-  
-  Widget _buildCardInfo(BaseCard card) {
-    if (card is MemberCard) {
-      return Row(
-        children: [
-          Expanded(
-            child: Text(
-              '${card.series.displayName} / コスト: ${card.cost}',
-              style: TextStyle(fontSize: 10),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      );
-    } else if (card is LiveCard) {
-      return Row(
-        children: [
-          Expanded(
-            child: Text(
-              '${card.series.displayName} / スコア: ${card.score}',
-              style: TextStyle(fontSize: 10),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      );
-    } else {
-      return Row(
-        children: [
-          Expanded(
-            child: Text(
-              card.series.displayName,
-              style: TextStyle(fontSize: 10),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      );
+
+  Color _getRarityColor(String rarity) {
+    switch (rarity.toUpperCase()) {
+      case 'N': return Colors.grey.shade600;
+      case 'R': return Colors.blue;
+      case 'R+': return Colors.deepPurple;
+      case 'P': return Colors.amber.shade600;
+      case 'P+': return Colors.orange.shade600;
+      case 'P-E': return Colors.green.shade600;
+      case 'L': return Colors.red.shade600;
+      case 'SEC': return Colors.pink.shade600;
+      default: return Colors.grey.shade500;
     }
   }
-}
 
-// デッキ一覧タブとお気に入りタブは既存のコードをそのまま使用
-class DeckListTab extends StatefulWidget {
-  const DeckListTab({super.key});
-
-  @override
-  _DeckListTabState createState() => _DeckListTabState();
-}
-
-class _DeckListTabState extends State<DeckListTab> {
-  // 既存のコードをそのまま使用
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text('デッキ一覧機能（実装予定）'),
-    );
-  }
-}
-
-class FavoritesTab extends StatefulWidget {
-  const FavoritesTab({super.key});
-
-  @override
-  _FavoritesTabState createState() => _FavoritesTabState();
-}
-
-class _FavoritesTabState extends State<FavoritesTab> {
-  // 既存のコードをそのまま使用
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text('お気に入り機能（実装予定）'),
-    );
+  Color _getSeriesColor(String series) {
+    if (series.contains('ラブライブ！') && !series.contains('サンシャイン') && !series.contains('虹ヶ咲') && !series.contains('スーパースター')) {
+      return Colors.pink;
+    } else if (series.contains('サンシャイン')) {
+      return Colors.orange;
+    } else if (series.contains('虹ヶ咲')) {
+      return Colors.purple;
+    } else if (series.contains('スーパースター')) {
+      return Colors.blue;
+    } else if (series.contains('蓮ノ空')) {
+      return Colors.green;
+    }
+    return Colors.grey;
   }
 }

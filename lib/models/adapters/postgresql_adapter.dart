@@ -1,5 +1,5 @@
 // ================================================
-// PostgreSQL対応アダプター（実際のEnum対応版）
+// PostgreSQL対応アダプター（Rarity enum完全対応版）
 // ================================================
 
 // lib/models/adapters/postgresql_adapter.dart
@@ -21,7 +21,7 @@ class PostgreSQLAdapter {
     final id = row['id'] as int;
     final cardNumber = row['card_number'] as String;
     final name = row['name'] as String;
-    final rarity = row['rarity'] as String;
+    final rarityStr = row['rarity'] as String;
     final series = row['series'] as String;
     final setName = row['set_name'] as String;
     final cardType = row['card_type'] as String;
@@ -34,6 +34,7 @@ class PostgreSQLAdapter {
     final updatedAt = row['updated_at'] as String?;
 
     // 共通の変換処理
+    final rarityEnum = _parseRarity(rarityStr);  // ✅ String → Rarity enum
     final seriesEnum = _parseSeriesName(series);
     final unitEnum = _parseUnitName(cardData['unit'] as String?);
 
@@ -44,7 +45,7 @@ class PostgreSQLAdapter {
           id: id,
           cardNumber: cardNumber,
           name: name,
-          rarity: rarity,
+          rarity: rarityEnum,        // ✅ Rarity enum使用
           setName: setName,
           imageUrl: imageUrl,
           series: seriesEnum,
@@ -60,7 +61,7 @@ class PostgreSQLAdapter {
           id: id,
           cardNumber: cardNumber,
           name: name,
-          rarity: rarity,
+          rarity: rarityEnum,        // ✅ Rarity enum使用
           setName: setName,
           imageUrl: imageUrl,
           series: seriesEnum,
@@ -76,7 +77,7 @@ class PostgreSQLAdapter {
           id: id,
           cardNumber: cardNumber,
           name: name,
-          rarity: rarity,
+          rarity: rarityEnum,        // ✅ Rarity enum使用
           setName: setName,
           imageUrl: imageUrl,
           series: seriesEnum,
@@ -92,12 +93,12 @@ class PostgreSQLAdapter {
     }
   }
 
-  // メンバーカード作成
+  // ✅ メンバーカード作成（Rarity enum対応）
   static MemberCard _createMemberCard({
     required int id,
     required String cardNumber,
     required String name,
-    required String rarity,
+    required Rarity rarity,          // ✅ Rarity enum使用
     required String setName,
     required String imageUrl,
     required SeriesName series,
@@ -126,27 +127,27 @@ class PostgreSQLAdapter {
 
     return MemberCard(
       id: id,
-      cardCode: cardNumber,  // PostgreSQLのcard_numberをcardCodeとして使用
-      rarity: rarity,
-      productSet: setName,   // PostgreSQLのset_nameをproductSetとして使用
+      cardCode: cardNumber,
+      rarity: rarity,              // ✅ Rarity enum直接使用
+      productSet: setName,
       name: name,
       series: series,
       unit: unit,
       imageUrl: imageUrl,
       cost: cost,
       hearts: hearts,
-      blades: blade,        // PostgreSQLのbladeをbladesとして使用
+      blades: blade,
       bladeHearts: bladeHearts,
       effect: effect,
     );
   }
 
-  // ライブカード作成
+  // ✅ ライブカード作成（Rarity enum対応）
   static LiveCard _createLiveCard({
     required int id,
     required String cardNumber,
     required String name,
-    required String rarity,
+    required Rarity rarity,          // ✅ Rarity enum使用
     required String setName,
     required String imageUrl,
     required SeriesName series,
@@ -174,7 +175,7 @@ class PostgreSQLAdapter {
     return LiveCard(
       id: id,
       cardCode: cardNumber,
-      rarity: rarity,
+      rarity: rarity,              // ✅ Rarity enum直接使用
       productSet: setName,
       name: name,
       series: series,
@@ -187,12 +188,12 @@ class PostgreSQLAdapter {
     );
   }
 
-  // エネルギーカード作成
+  // ✅ エネルギーカード作成（Rarity enum対応）
   static EnergyCard _createEnergyCard({
     required int id,
     required String cardNumber,
     required String name,
-    required String rarity,
+    required Rarity rarity,          // ✅ Rarity enum使用
     required String setName,
     required String imageUrl,
     required SeriesName series,
@@ -204,8 +205,8 @@ class PostgreSQLAdapter {
   }) {
     return EnergyCard(
       id: id,
-      cardCode: cardNumber,
-      rarity: rarity,
+      cardCode: cardNumber,        // ✅ 正しい引数名
+      rarity: rarity,              // ✅ Rarity enum直接使用
       productSet: setName,
       name: name,
       series: series,
@@ -363,10 +364,9 @@ class PostgreSQLAdapter {
     return BladeHeart(quantities: quantities);
   }
 
-  // レアリティ変換（実際のRarityに対応）
+  // ✅ レアリティ変換（正しいメソッド名）
   static Rarity _parseRarity(String rarityStr) {
-    // RarityExtension.fromStringメソッドを使用
-    return RarityExtension.fromString(rarityStr);
+    return Rarity.fromString(rarityStr);  // ✅ 正しいメソッド名
   }
 }
 
@@ -397,19 +397,19 @@ class PostgreSQLCardRepository {
     throw UnimplementedError('API integration needed');
   }
 
-  // 検索機能（Enum対応）
+  // ✅ 検索機能（Enum対応）
   static Future<List<BaseCard>> searchCards({
     String? name,
     SeriesName? series,
-    Rarity? rarity,
-    CardType? cardType,
+    Rarity? rarity,          // ✅ Rarity enum使用
+    String? cardType,        // CardTypeは文字列のまま
     UnitName? unit,
   }) async {
     // TODO: 実装
     throw UnimplementedError('API integration needed');
   }
 
-  // レアリティフィルタリング
+  // ✅ レアリティフィルタリング（enum対応）
   static Future<List<BaseCard>> getCardsByRarity(Rarity rarity) async {
     // TODO: 実装
     throw UnimplementedError('API integration needed');
@@ -421,24 +421,28 @@ class PostgreSQLCardRepository {
     throw UnimplementedError('API integration needed');
   }
 
-  // テスト用データ（上原歩夢のサンプル）
+  // ✅ テスト用データ（上原歩夢のサンプル、完全対応版）
   static BaseCard createSampleCard() {
     final sampleData = {
       'id': 1,
       'card_number': 'PL!N-bp1-001-P',
       'name': '上原歩夢',
-      'rarity': 'P',
-      'series': 'love_live',
+      'rarity': 'P',                    // ✅ String（後でenum変換）
+      'series': 'nijigasaki',           // ✅ 虹ヶ咲に修正
       'set_name': 'ブースターパック vol.1',
       'card_type': 'member',
       'image_url': 'https://llofficial-cardgame.com/wordpress/wp-content/images/cardlist/BP01/PL!N-bp1-001-P.png',
       'card_data': {
         "cost": 9,
-        "unit": "azuna",
+        "unit": "azuna",               // ✅ A・ZU・NAに変換される
         "blade": 4,
         "score": 0,
         "effect": "支払ってもよい：ライブ終了時まで、を得る。",
-        "hearts": [{"color": "pink"}, {"color": "pink"}, {"color": "pink"}],
+        "hearts": [
+          {"color": "pink"}, 
+          {"color": "pink"}, 
+          {"color": "pink"}
+        ],
         "blade_heart": {},
         "special_heart": {},
         "info_map": {
@@ -463,46 +467,113 @@ class PostgreSQLCardRepository {
 
   // 開発用：複数サンプルカードの生成
   static List<BaseCard> createSampleCards() {
-    return [
+    // 他のサンプルカードも追加
+    final sampleCards = <BaseCard>[
       createSampleCard(),
-      // 他のサンプルカードも追加可能
+      
+      // ✅ 追加サンプル：ライブカード
+      createSampleLiveCard(),
+      
+      // ✅ 追加サンプル：エネルギーカード
+      createSampleEnergyCard(),
     ];
+    
+    return sampleCards;
+  }
+
+  // ✅ ライブカードサンプル
+  static BaseCard createSampleLiveCard() {
+    final sampleData = {
+      'id': 2,
+      'card_number': 'PL!N-bp1-L001',
+      'name': 'Snow halation',
+      'rarity': 'L',
+      'series': 'lovelive',
+      'set_name': 'ブースターパック vol.1',
+      'card_type': 'live',
+      'image_url': 'https://example.com/snow_halation.jpg',
+      'card_data': {
+        "score": 3,
+        "effect": "このライブが成功した時、追加でカードを2枚引く。",
+        "required_hearts": [
+          {"color": "red"},
+          {"color": "yellow"},
+          {"color": "blue"}
+        ],
+        "blade_heart": {"scoreUp": 1}
+      },
+      'version_added': '1.0.0',
+      'created_at': '2025-05-18T16:44:02.894451',
+      'updated_at': '2025-05-20T15:18:13.212279'
+    };
+
+    return PostgreSQLAdapter.fromPostgreSQLRow(sampleData);
+  }
+
+  // ✅ エネルギーカードサンプル
+  static BaseCard createSampleEnergyCard() {
+    final sampleData = {
+      'id': 3,
+      'card_number': 'PL!N-bp1-E001',
+      'name': 'ラブライブ！エネルギー',
+      'rarity': 'P-E',
+      'series': 'lovelive',
+      'set_name': 'ブースターパック vol.1',
+      'card_type': 'energy',
+      'image_url': 'https://example.com/energy.jpg',
+      'card_data': {},
+      'version_added': '1.0.0',
+      'created_at': '2025-05-18T16:44:02.894451',
+      'updated_at': '2025-05-20T15:18:13.212279'
+    };
+
+    return PostgreSQLAdapter.fromPostgreSQLRow(sampleData);
   }
 }
 
 // ========== デバッグ用ヘルパー ==========
 
 class PostgreSQLDebugHelper {
-  // Enumマッピングの確認
+  // ✅ Enumマッピングの確認（修正版）
   static void printEnumMappings() {
     print('=== Series Mapping ===');
-    print('love_live -> ${_parseSeriesName('love_live')}');
-    print('nijigasaki -> ${_parseSeriesName('nijigasaki')}');
+    print('love_live -> ${PostgreSQLAdapter._parseSeriesName('love_live')}');
+    print('nijigasaki -> ${PostgreSQLAdapter._parseSeriesName('nijigasaki')}');
     
     print('\n=== Unit Mapping ===');
-    print('azuna -> ${_parseUnitName('azuna')}');
-    print('qu4rtz -> ${_parseUnitName('qu4rtz')}');
+    print('azuna -> ${PostgreSQLAdapter._parseUnitName('azuna')}');
+    print('qu4rtz -> ${PostgreSQLAdapter._parseUnitName('qu4rtz')}');
     print('A・ZU・NA -> ${UnitName.fromJapaneseName('A・ZU・NA')}');
     
     print('\n=== Unit Code Conversion ===');
-    print('azuna -> ${_convertUnitCodeToFullName('azuna')}');
-    print('qu4rtz -> ${_convertUnitCodeToFullName('qu4rtz')}');
+    print('azuna -> ${PostgreSQLAdapter._convertUnitCodeToFullName('azuna')}');
+    print('qu4rtz -> ${PostgreSQLAdapter._convertUnitCodeToFullName('qu4rtz')}');
     
     print('\n=== Rarity Mapping ===');
-    print('P -> ${RarityExtension.fromString('P')}');
-    print('R -> ${RarityExtension.fromString('R')}');
-    print('R+ -> ${RarityExtension.fromString('R+')}');
+    print('P -> ${PostgreSQLAdapter._parseRarity('P')}');
+    print('R -> ${PostgreSQLAdapter._parseRarity('R')}');
+    print('R+ -> ${PostgreSQLAdapter._parseRarity('R+')}');
   }
 
-  static SeriesName _parseSeriesName(String seriesStr) {
-    return PostgreSQLAdapter._parseSeriesName(seriesStr);
-  }
-
-  static UnitName? _parseUnitName(String unitStr) {
-    return PostgreSQLAdapter._parseUnitName(unitStr);
-  }
-
-  static String _convertUnitCodeToFullName(String unitCode) {
-    return PostgreSQLAdapter._convertUnitCodeToFullName(unitCode);
+  // ✅ テスト実行メソッド
+  static void testSampleCardCreation() {
+    try {
+      print('=== Sample Card Creation Test ===');
+      
+      final memberCard = PostgreSQLCardRepository.createSampleCard();
+      print('✅ MemberCard: ${memberCard.name} (${memberCard.rarity.displayName})');
+      
+      final liveCard = PostgreSQLCardRepository.createSampleLiveCard();
+      print('✅ LiveCard: ${liveCard.name} (${liveCard.rarity.displayName})');
+      
+      final energyCard = PostgreSQLCardRepository.createSampleEnergyCard();
+      print('✅ EnergyCard: ${energyCard.name} (${energyCard.rarity.displayName})');
+      
+      print('\n=== All Tests Passed ===');
+      
+    } catch (e, stackTrace) {
+      print('❌ Test Failed: $e');
+      print('StackTrace: $stackTrace');
+    }
   }
 }

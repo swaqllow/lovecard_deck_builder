@@ -1,321 +1,277 @@
-// lib/providers/card_data_provider.dart
-import 'package:flutter/material.dart';
-import '../models/card/base_card.dart';
-import '../models/sync/sync_result.dart';
+import 'package:flutter/foundation.dart';
+import '../models/card/card.dart';
+import '../models/enums/enums.dart';
 import '../services/database/database_helper.dart';
-import '../services/storage/local_storage_service.dart';
-import '../services/sync/sync_service.dart';
-import '../services/image_cache_service.dart';
-import '../services/api/user_api_service.dart';
 
 class CardDataProvider with ChangeNotifier {
-  final DatabaseHelper _databaseHelper;
-  final LocalStorageService _localStorageService;
-  final SyncService _syncService;
-  final ImageCacheService _imageCacheService;
-
-  // カードデータの状態
   List<BaseCard> _cards = [];
+  List<BaseCard> _filteredCards = [];
   bool _isLoading = false;
-  String? _errorMessage;
-  DateTime? _lastSyncTime;
-  String _currentVersion = '0.0.0';
+  String? _error;
+  String? _syncError;
   
-  // 同期の状態
-  bool _isSyncing = false;
-  SyncResult? _lastSyncResult;
+  final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  CardDataProvider({
-    required DatabaseHelper databaseHelper,
-    required LocalStorageService localStorageService,
-    required SyncService syncService,
-    required ImageCacheService imageCacheService,
-  })  : _databaseHelper = databaseHelper,
-        _localStorageService = localStorageService,
-        _syncService = syncService,
-        _imageCacheService = imageCacheService {
-    _initializeCardData();
-  }
-
-  // ========== ゲッター ==========
-
+  // Getters
   List<BaseCard> get cards => _cards;
+  List<BaseCard> get filteredCards => _filteredCards;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
-  DateTime? get lastSyncTime => _lastSyncTime;
-  String get currentVersion => _currentVersion;
-  bool get isSyncing => _isSyncing;
-  SyncResult? get lastSyncResult => _lastSyncResult;
-  
-  bool get hasCards => _cards.isNotEmpty;
-  int get cardCount => _cards.length;
+  String? get error => _error;
+  String? get syncError => _syncError;
 
-  // ========== 初期化 ==========
-
-  Future<void> _initializeCardData() async {
-    await loadCardsFromDatabase();
-    await _loadSyncInfo();
+  // 公開用初期化メソッド
+  Future<void> initialize() async {
+    await loadCards();
   }
 
-  /// ローカルデータベースからカードをロード
-  Future<void> loadCardsFromDatabase() async {
-    try {
-      _setLoading(true);
-      _clearError();
+  // カードデータの読み込み
+  Future<void> loadCards() async {
+    _setLoading(true);
+    _clearError();
 
-      final cards = await _databaseHelper.getAllCards();
+    try {
+      print('CardDataProvider: カードデータ読み込み開始');
       
-      _cards = cards;
-      print('ローカルDBから${cards.length}枚のカードをロード');
+      // データベースからカードを取得
+      final loadedCards = await _dbHelper.getCards();
+      
+      _cards = loadedCards;
+      _filteredCards = List.from(_cards);
+      
+      print('CardDataProvider: ${_cards.length}枚のカードを読み込みました');
       
     } catch (e) {
       _setError('カードデータの読み込みに失敗しました: $e');
-      print('カードロードエラー: $e');
+      print('CardDataProvider エラー: $e');
     } finally {
       _setLoading(false);
     }
   }
 
-  /// 同期情報の読み込み
-  Future<void> _loadSyncInfo() async {
-    try {
-      _lastSyncTime = await _localStorageService.getLastSyncTime();
-      _currentVersion = await _localStorageService.getCardDataVersion();
-      notifyListeners();
-    } catch (e) {
-      print('同期情報読み込みエラー: $e');
-    }
-  }
-
-  // ========== カード操作 ==========
-
-  /// カード検索
-  List<BaseCard> searchCards({
-    String? name,
+  // カード検索・フィルタリング（実際の構造に合わせて修正）
+  void filterCards({
+    String? query,
     String? series,
-    String? unit,
+    String? rarity,
+    String? heartColor,
     String? cardType,
-    int? minCost,
-    int? maxCost,
   }) {
-    return _cards.where((card) {
-      // 名前での絞り込み
-      if (name != null && name.isNotEmpty) {
-        if (!card.name.toLowerCase().contains(name.toLowerCase())) {
+    _filteredCards = _cards.where((card) {
+      // テキスト検索
+      if (query != null && query.isNotEmpty) {
+        final searchQuery = query.toLowerCase();
+        if (!card.name.toLowerCase().contains(searchQuery) &&
+            !card.cardCode.toLowerCase().contains(searchQuery)) {
           return false;
         }
       }
 
-      // シリーズでの絞り込み
-      if (series != null && series.isNotEmpty) {
+      // シリーズフィルタ
+      if (series != null && series.isNotEmpty && series != 'all') {
         if (card.series.name != series) {
           return false;
         }
       }
 
-      // ユニットでの絞り込み
-      if (unit != null && unit.isNotEmpty) {
-        if (card.unit?.name != unit) {
+      // レアリティフィルタ（Rarity enumを使用）
+      if (rarity != null && rarity.isNotEmpty && rarity != 'all') {
+        if (card.rarity.displayName != rarity) {
           return false;
         }
       }
 
-      // カードタイプでの絞り込み
-      if (cardType != null && cardType.isNotEmpty) {
+      // ハートカラーフィルタ（メンバーカードの場合）
+      if (heartColor != null && heartColor.isNotEmpty && heartColor != 'all') {
+        if (card is MemberCard) {
+          // 複数のハートを持つ場合があるので、いずれかが一致すればOK
+          bool hasMatchingColor = card.hearts.any((heart) => 
+              heart.color.name == heartColor);
+          if (!hasMatchingColor) {
+            return false;
+          }
+        }
+      }
+
+      // カードタイプフィルタ
+      if (cardType != null && cardType.isNotEmpty && cardType != 'all') {
         if (card.cardType != cardType) {
           return false;
         }
       }
 
-      // コスト範囲での絞り込み（MemberCardのみ）
-      if ((minCost != null || maxCost != null) && card.cardType == 'member') {
-        final cardCost = (card as dynamic).cost as int?;
-        if (cardCost != null) {
-          if (minCost != null && cardCost < minCost) return false;
-          if (maxCost != null && cardCost > maxCost) return false;
-        }
-      }
-
       return true;
     }).toList();
+
+    notifyListeners();
   }
 
-  /// カードタイプ別取得
-  List<BaseCard> getCardsByType(String cardType) {
-    return _cards.where((card) => card.cardType == cardType).toList();
+  // フィルタリセット
+  void resetFilter() {
+    _filteredCards = List.from(_cards);
+    notifyListeners();
   }
 
-  /// シリーズ別取得
-  List<BaseCard> getCardsBySeries(String seriesName) {
-    return _cards.where((card) => card.series.name == seriesName).toList();
-  }
-
-  // ========== 同期機能 ==========
-
-  /// カードデータの同期
-  Future<void> syncCardData({bool forceSync = false}) async {
-    if (_isSyncing) {
-      print('既に同期処理中です');
-      return;
-    }
-
+  // 特定のカードを取得（IDで検索）
+  BaseCard? getCardById(int id) {
     try {
-      _setSyncing(true);
-      _clearError();
+      return _cards.firstWhere((card) => card.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
 
-      print('カードデータ同期開始 (forceSync: $forceSync)');
+  // 特定のカードを取得（カードコードで検索）
+  BaseCard? getCardByCode(String cardCode) {
+    try {
+      return _cards.firstWhere((card) => card.cardCode == cardCode);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // カードを追加（デバッグ用）
+  Future<void> addCard(BaseCard card) async {
+    try {
+      await _dbHelper.insertCard(card);
+      await loadCards(); // リロード
+    } catch (e) {
+      _setError('カードの追加に失敗しました: $e');
+    }
+  }
+
+  // 複数カードを追加（デバッグ用）
+  Future<void> addCards(List<BaseCard> cards) async {
+    try {
+      await _dbHelper.insertCards(cards);
+      await loadCards(); // リロード
+    } catch (e) {
+      _setError('カードの追加に失敗しました: $e');
+    }
+  }
+
+  // 更新確認メソッド（旧名対応）
+  Future<void> checkForUpdates() async {
+    // 現在はローカルデータのみなので、loadCardsを呼び出し
+    await loadCards();
+  }
+
+  // 同期メソッド（旧名対応）
+  Future<void> syncData({bool forceFullSync = false}) async {
+    _syncError = null;
+    
+    try {
+      // 現在はローカル同期のみ
+      await loadCards();
       
-      final syncResult = await _syncService.syncCards(forceSync: forceSync);
-      _lastSyncResult = syncResult;
+      print('CardDataProvider: 同期完了 (${_cards.length}枚)');
+      
+    } catch (e) {
+      _syncError = '同期に失敗しました: $e';
+      print('CardDataProvider 同期エラー: $e');
+    }
+  }
 
-      if (syncResult.success) {
-        if (syncResult.hasChanges) {
-          // 変更があった場合はローカルデータを再読み込み
-          await loadCardsFromDatabase();
-          print('同期完了: ${syncResult.userDetailMessage}');
-        } else {
-          print('同期完了: データは最新でした');
-        }
-        
-        // 同期情報を更新
-        await _loadSyncInfo();
-        
-      } else {
-        _setError(syncResult.message);
-        print('同期失敗: ${syncResult.message}');
+  // 統計情報の取得（実際の構造に合わせて修正）
+  Map<String, dynamic> getStatistics() {
+    final stats = <String, dynamic>{};
+    
+    // 総数
+    stats['totalCards'] = _cards.length;
+    
+    // シリーズ別統計
+    final seriesCount = <String, int>{};
+    for (final card in _cards) {
+      seriesCount[card.series.displayName] = (seriesCount[card.series.displayName] ?? 0) + 1;
+    }
+    stats['seriesCount'] = seriesCount;
+    
+    // レアリティ別統計
+    final rarityCount = <String, int>{};
+    for (final card in _cards) {
+      rarityCount[card.rarity.displayName] = (rarityCount[card.rarity.displayName] ?? 0) + 1;
+    }
+    stats['rarityCount'] = rarityCount;
+    
+    // カードタイプ別統計
+    final typeCount = <String, int>{};
+    for (final card in _cards) {
+      typeCount[card.cardType] = (typeCount[card.cardType] ?? 0) + 1;
+    }
+    stats['typeCount'] = typeCount;
+    
+    // メンバーカード専用統計
+    final memberCards = _cards.whereType<MemberCard>().toList();
+    if (memberCards.isNotEmpty) {
+      // コスト分布
+      final costCount = <int, int>{};
+      for (final card in memberCards) {
+        costCount[card.cost] = (costCount[card.cost] ?? 0) + 1;
       }
-
-    } catch (e) {
-      _setError('同期中にエラーが発生しました: $e');
-      print('同期エラー: $e');
-    } finally {
-      _setSyncing(false);
-    }
-  }
-
-  /// 同期が必要かチェック
-  Future<bool> needsSync() async {
-    try {
-      return await _syncService.needsSync();
-    } catch (e) {
-      print('同期チェックエラー: $e');
-      return false;
-    }
-  }
-
-  /// 自動同期の実行
-  Future<void> autoSyncIfNeeded() async {
-    if (await needsSync()) {
-      print('自動同期を実行します');
-      await syncCardData();
-    }
-  }
-
-  // ========== 画像キャッシュ ==========
-
-  /// カード画像のプリロード
-  Future<void> preloadCardImages({int? limit}) async {
-    try {
-      final cardsToCache = limit != null ? _cards.take(limit).toList() : _cards;
+      stats['costCount'] = costCount;
       
-      for (var card in cardsToCache) {
-        if (card.imageUrl.isNotEmpty) {
-          await _imageCacheService.cacheImage(card.imageUrl);
+      // ハートカラー分布
+      final heartColorCount = <String, int>{};
+      for (final card in memberCards) {
+        for (final heart in card.hearts) {
+          heartColorCount[heart.color.displayName] = 
+              (heartColorCount[heart.color.displayName] ?? 0) + 1;
         }
       }
-      
-      print('${cardsToCache.length}枚のカード画像をプリロード完了');
-    } catch (e) {
-      print('画像プリロードエラー: $e');
+      stats['heartColorCount'] = heartColorCount;
     }
+    
+    return stats;
   }
 
-  /// 画像キャッシュのクリア
-  Future<void> clearImageCache() async {
-    try {
-      await _imageCacheService.clearAllCache();
-      print('画像キャッシュをクリアしました');
-    } catch (e) {
-      print('画像キャッシュクリアエラー: $e');
-    }
+  // カードタイプ別の取得
+  List<MemberCard> get memberCards => _cards.whereType<MemberCard>().toList();
+  List<LiveCard> get liveCards => _cards.whereType<LiveCard>().toList();
+  List<EnergyCard> get energyCards => _cards.whereType<EnergyCard>().toList();
+
+  // シリーズ別の取得
+  List<BaseCard> getCardsBySeries(SeriesName series) {
+    return _cards.where((card) => card.series == series).toList();
   }
 
-  // ========== 状態管理 ==========
+  // レアリティ別の取得
+  List<BaseCard> getCardsByRarity(Rarity rarity) {
+    return _cards.where((card) => card.rarity == rarity).toList();
+  }
 
+  // プライベートメソッド
   void _setLoading(bool loading) {
-    if (_isLoading != loading) {
-      _isLoading = loading;
-      notifyListeners();
-    }
-  }
-
-  void _setSyncing(bool syncing) {
-    if (_isSyncing != syncing) {
-      _isSyncing = syncing;
-      notifyListeners();
-    }
+    _isLoading = loading;
+    notifyListeners();
   }
 
   void _setError(String error) {
-    _errorMessage = error;
+    _error = error;
     notifyListeners();
   }
 
   void _clearError() {
-    if (_errorMessage != null) {
-      _errorMessage = null;
-      notifyListeners();
-    }
+    _error = null;
+    notifyListeners();
   }
 
-  // ========== デバッグ機能 ==========
-
-  /// プロバイダーの状態をデバッグ出力
-  void printStatus() {
-    print('=== CardDataProvider Status ===');
-    print('カード数: ${_cards.length}');
-    print('ロード中: $_isLoading');
-    print('同期中: $_isSyncing');
-    print('エラー: $_errorMessage');
-    print('バージョン: $_currentVersion');
-    print('最終同期: $_lastSyncTime');
-    if (_lastSyncResult != null) {
-      print('最終同期結果: ${_lastSyncResult!}');
+  // デバッグ用メソッド
+  void debugPrint() {
+    print('=== CardDataProvider Debug Info ===');
+    print('Cards loaded: ${_cards.length}');
+    print('Filtered cards: ${_filteredCards.length}');
+    print('Is loading: $_isLoading');
+    print('Error: $_error');
+    print('Sync error: $_syncError');
+    
+    if (_cards.isNotEmpty) {
+      print('Sample cards:');
+      for (int i = 0; i < _cards.length.clamp(0, 3); i++) {
+        final card = _cards[i];
+        print('  - ${card.name} (${card.series.displayName}, ${card.rarity.displayName})');
+      }
     }
-  }
-
-  /// ローカルデータのリセット
-  Future<void> resetLocalData() async {
-    try {
-      _setLoading(true);
-      
-      // ローカルデータベースをクリア
-      await _databaseHelper.clearAllCards();
-      
-      // ローカル設定をクリア
-      await _localStorageService.clearAllSettings();
-      
-      // 画像キャッシュをクリア
-      await _imageCacheService.clearAllCache();
-      
-      // 状態をリセット
-      _cards.clear();
-      _currentVersion = '0.0.0';
-      _lastSyncTime = null;
-      _lastSyncResult = null;
-      
-      print('ローカルデータをリセットしました');
-      
-    } catch (e) {
-      _setError('データリセットに失敗しました: $e');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  @override
-  void dispose() {
-    // 必要に応じてリソースのクリーンアップ
-    super.dispose();
+    
+    final stats = getStatistics();
+    print('Statistics: $stats');
   }
 }

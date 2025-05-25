@@ -70,4 +70,59 @@ class EnergyCard extends BaseCard {
       imageUrl: json['image_url'] as String? ?? '',
     );
   }
+ factory EnergyCard.fromMap(Map<String, dynamic> map) {
+  print('=== EnergyCard.fromMap 開始 ===');
+  
+  try {
+    // ✅ 安全なレアリティ変換
+    Rarity rarity = Rarity.pe; // エネルギーカードのデフォルト
+    try {
+      final rarityStr = map['rarity'] as String? ?? 'P-E';
+      rarity = Rarity.fromString(rarityStr);
+    } catch (e) {
+      print('EnergyCard レアリティ変換エラー: $e');
+      rarity = Rarity.pe;
+    }
+
+    // ✅ 安全なシリーズ変換
+    SeriesName series = SeriesName.lovelive;
+    try {
+      final seriesStr = map['series'] as String? ?? 'lovelive';
+      series = SeriesName.values.firstWhere(
+        (s) => s.name == seriesStr,
+        orElse: () => SeriesName.lovelive,
+      );
+    } catch (e) {
+      print('EnergyCard シリーズ変換エラー: $e');
+      series = SeriesName.lovelive;
+    }
+
+    return EnergyCard(
+      id: map['id'] ?? 0,
+      cardCode: map['card_code'] ?? '',
+      rarity: rarity,
+      productSet: map['product_set'] ?? '',
+      name: map['name'] ?? 'Unknown Energy',
+      series: series,
+      unit: null, // エネルギーカードはユニット無し
+      imageUrl: map['image_url'] ?? '',
+    );
+
+  } catch (e, stackTrace) {
+    print('❌ EnergyCard.fromMap エラー: $e');
+    
+    // エラー時のフォールバック
+    return EnergyCard(
+      id: 0,
+      cardCode: 'ERROR-ENERGY',
+      rarity: Rarity.pe,
+      productSet: 'Error',
+      name: 'Error Energy Card',
+      series: SeriesName.lovelive,
+      unit: null,
+      imageUrl: '',
+    );
+  }
+}
+
 }
