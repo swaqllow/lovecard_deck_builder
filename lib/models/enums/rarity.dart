@@ -51,6 +51,43 @@ enum Rarity {
         return 15; // Rと同等 
     }
   }
+    // 文字列からRarityを取得するstaticメソッド
+  static Rarity fromString(String rarityStr) {
+    switch (rarityStr.toUpperCase()) {
+      case 'N':
+        return Rarity.n;
+      case 'R':
+        return Rarity.r;
+      case 'R+':
+        return Rarity.rplus;  
+      case 'P':
+        return Rarity.p;
+      case 'P+':
+        return Rarity.pplus;
+      case 'SR-E':
+        return Rarity.sre;
+      case 'P-E':
+        return Rarity.pe;
+      case 'P-E+':
+        return Rarity.peplus;
+      case 'L':
+        return Rarity.l;
+      case 'L-E':
+        return Rarity.lle;
+      case 'SEC':
+        return Rarity.sec;
+      case 'SEC+':
+        return Rarity.secpls;
+      case 'SEC-E': 
+        return Rarity.sece;
+      case 'PR':
+        return Rarity.pr; 
+      case 'SD':
+        return Rarity.sd;
+      default:
+        return Rarity.n; // デフォルト値
+    }
+  }
 }
 
 extension RarityExtension on Rarity {
@@ -121,45 +158,6 @@ extension RarityExtension on Rarity {
         return 'PR';
       case Rarity.sd:
         return 'Structured Deck';
-    }
-  }
-  
-  
-  // 文字列からRarityを取得するstaticメソッド
-  static Rarity fromString(String rarityStr) {
-    switch (rarityStr.toUpperCase()) {
-      case 'N':
-        return Rarity.n;
-      case 'R':
-        return Rarity.r;
-      case 'R+':
-        return Rarity.rplus;  
-      case 'P':
-        return Rarity.p;
-      case 'P+':
-        return Rarity.pplus;
-      case 'SR-E':
-        return Rarity.sre;
-      case 'P-E':
-        return Rarity.pe;
-      case 'P-E+':
-        return Rarity.peplus;
-      case 'L':
-        return Rarity.l;
-      case 'L-E':
-        return Rarity.lle;
-      case 'SEC':
-        return Rarity.sec;
-      case 'SEC+':
-        return Rarity.secpls;
-      case 'SEC-E': 
-        return Rarity.sece;
-      case 'PR':
-        return Rarity.pr; 
-      case 'SD':
-        return Rarity.sd;
-      default:
-        return Rarity.n; // デフォルト値
     }
   }
 }

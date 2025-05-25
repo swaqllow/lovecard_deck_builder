@@ -2,6 +2,7 @@
 import 'base_card.dart';
 import '../enums/series_name.dart';
 import '../enums/unit_name.dart';
+import '../enums/rarity.dart';  // Rarity enumをインポート
 import '../heart.dart';
 import '../blade_heart.dart';
 
@@ -14,7 +15,7 @@ class LiveCard extends BaseCard {
   LiveCard({
     required super.id,
     required super.cardCode,
-    required super.rarity,
+    required Rarity rarity,          // Rarity enumを使用
     required super.productSet,
     required super.name,
     required super.series,
@@ -24,7 +25,7 @@ class LiveCard extends BaseCard {
     required this.requiredHearts,
     required this.bladeHearts,
     required this.effect,
-  });
+  }) : super(rarity: rarity);        // 親クラスにRarity enumを渡す
 
   @override
   String get cardType => 'live';
@@ -34,7 +35,7 @@ class LiveCard extends BaseCard {
     return {
       'id': id,
       'card_code': cardCode,
-      'rarity': rarity,
+      'rarity': rarity.displayName,    // enum -> 文字列変換
       'product_set': productSet,
       'name': name,
       'series': series.toString().split('.').last,
@@ -66,6 +67,10 @@ class LiveCard extends BaseCard {
       unit = matchingUnits.isNotEmpty ? matchingUnits.first : null;
     }
 
+    // レアリティの変換（文字列 -> enum）
+    final rarityStr = json['rarity'] as String? ?? 'L';
+    final rarity = Rarity.fromString(rarityStr);
+
     // 必要ハートの変換
     final List<Heart> requiredHearts = [];
     if (json['required_hearts'] != null) {
@@ -74,16 +79,15 @@ class LiveCard extends BaseCard {
     }
 
     // ブレードハートの変換
-    final BladeHeart bladeHearts = BladeHeart(quantities: {});
+    BladeHeart bladeHearts = BladeHeart(quantities: {});
     if (json['blade_hearts'] != null) {
-      final bladeHeartsList = json['blade_hearts'] as List<dynamic>;
-      bladeHeartsList.map((e) => BladeHeart.fromJson(e as Map<String, dynamic>));
+      bladeHearts = BladeHeart.fromJson(json['blade_hearts']);
     }
 
     return LiveCard(
       id: json['id'] as int,
       cardCode: json['card_code'] as String,
-      rarity: json['rarity'] as String,
+      rarity: rarity,                  // Rarity enumを設定
       productSet: json['product_set'] as String,
       name: json['name'] as String,
       series: series,
@@ -95,5 +99,4 @@ class LiveCard extends BaseCard {
       effect: json['effect'] as String? ?? '',
     );
   }
-
 }

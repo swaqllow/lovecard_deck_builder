@@ -2,19 +2,21 @@
 import 'base_card.dart';
 import '../enums/series_name.dart';
 import '../enums/unit_name.dart';
+import '../enums/rarity.dart';  // Rarity enumをインポート
 
 class EnergyCard extends BaseCard {
   EnergyCard({
     required super.id,
     required String cardCode,
-    required super.rarity,
+    required Rarity rarity,          // Rarity enumを使用
     required super.productSet,
     required super.name,
     required super.series,
     super.unit,
     required super.imageUrl,
   }) : super(
-          cardCode: "ENERGY_CARD",
+          cardCode: cardCode,
+          rarity: rarity,              // 親クラスにRarity enumを渡す
         );
 
   @override
@@ -25,7 +27,7 @@ class EnergyCard extends BaseCard {
     return {
       'id': id,
       'card_code': cardCode,
-      'rarity': rarity,
+      'rarity': rarity.displayName,    // enum -> 文字列変換
       'product_set': productSet,
       'name': name,
       'series': series.toString().split('.').last,
@@ -53,10 +55,14 @@ class EnergyCard extends BaseCard {
       unit = matchingUnits.isNotEmpty ? matchingUnits.first : null;
     }
 
+    // レアリティの変換（文字列 -> enum）
+    final rarityStr = json['rarity'] as String? ?? 'P-E';
+    final rarity = Rarity.fromString(rarityStr);
+
     return EnergyCard(
       id: json['id'] as int,
       cardCode: json['card_code'] as String,
-      rarity: json['rarity'] as String,
+      rarity: rarity,                  // Rarity enumを設定
       productSet: json['product_set'] as String,
       name: json['name'] as String,
       series: series,

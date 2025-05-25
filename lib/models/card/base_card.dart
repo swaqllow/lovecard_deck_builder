@@ -1,11 +1,12 @@
 // lib/models/card/base_card.dart
 import '../enums/series_name.dart';
 import '../enums/unit_name.dart';
+import '../enums/rarity.dart';  // Rarity enumをインポート
 
 abstract class BaseCard {
   final int id;               // カード番号
   final String cardCode;      // カード識別コード（構築上の同一カードを示す）
-  final String rarity;        // レアリティ
+  final Rarity rarity;        // レアリティ（enumに変更）
   final String productSet;    // 収録商品
   final String name;          // 名前
   final SeriesName series;    // シリーズ名
@@ -15,7 +16,7 @@ abstract class BaseCard {
   BaseCard({
     required this.id,
     required this.cardCode,
-    required this.rarity,
+    required this.rarity,      // Rarity enumを使用
     required this.productSet,
     required this.name,
     required this.series,
@@ -33,4 +34,7 @@ abstract class BaseCard {
   bool isSameCardForDeckBuilding(BaseCard other) {
     return cardCode == other.cardCode;
   }
+  
+  // レアリティの文字列表現（互換性のため）
+  String get rarityString => rarity.displayName;
 }

@@ -4,6 +4,7 @@ import '../enums/heart_color.dart';
 import '../enums/blade_heart.dart';
 import '../enums/unit_name.dart';
 import '../enums/series_name.dart';
+import '../enums/rarity.dart';  // Rarity enumをインポート
 import '../heart.dart';
 import '../blade_heart.dart';
 import 'dart:convert';
@@ -18,7 +19,7 @@ class MemberCard extends BaseCard {
   MemberCard({
     required super.id,
     required super.cardCode,
-    required super.rarity,
+    required Rarity rarity,            // Rarity enumを使用
     required super.productSet,
     required super.name,
     required super.series,
@@ -29,7 +30,7 @@ class MemberCard extends BaseCard {
     required this.blades,
     required this.bladeHearts,
     required this.effect,
-  });
+  }) : super(rarity: rarity);         // 親クラスにRarity enumを渡す
 
   @override
   String get cardType => 'member';
@@ -39,13 +40,14 @@ class MemberCard extends BaseCard {
     return {
       'id': id,
       'card_code': cardCode,
-      'rarity': rarity,
+      'rarity': rarity.displayName,    // enum -> 文字列変換
       'product_set': productSet,
       'name': name,
       'series': series.toString().split('.').last,
       'unit': unit?.toString().split('.').last,
       'image_url': imageUrl,
       'card_type': cardType,
+      'cost': cost,
       'hearts': hearts.map((heart) => heart.toJson()).toList(),
       'blades': blades,
       'blade_hearts': bladeHearts.toJson(),
@@ -71,6 +73,10 @@ class MemberCard extends BaseCard {
       unit = matchingUnits.isNotEmpty ? matchingUnits.first : null;
     }
 
+    // レアリティの変換（文字列 -> enum）
+    final rarityStr = json['rarity'] as String? ?? 'N';
+    final rarity = Rarity.fromString(rarityStr);
+
     // ハートの変換
     final List<Heart> hearts = [];
     if (json['hearts'] != null) {
@@ -82,16 +88,16 @@ class MemberCard extends BaseCard {
     final blades = json['blades'] as int? ?? 0;
 
     // ブレードハートの変換
-    final BladeHeart bladeHearts = BladeHeart(quantities: {});
+    BladeHeart bladeHearts = BladeHeart(quantities: {});
     if (json['blade_hearts'] != null) {
-      final bladeHeartsList = json['blade_hearts'] as List<dynamic>;
-      bladeHeartsList.map((e) => BladeHeart.fromJson(e as Map<String, dynamic>));
+      // toJson()の逆変換でFromJsonメソッドが必要
+      bladeHearts = BladeHeart.fromJson(json['blade_hearts']);
     }
 
     return MemberCard(
       id: json['id'] as int,
       cardCode: json['card_code'] as String,
-      rarity: json['rarity'] as String,
+      rarity: rarity,                  // Rarity enumを設定
       productSet: json['product_set'] as String,
       name: json['name'] as String,
       series: series,
@@ -105,17 +111,17 @@ class MemberCard extends BaseCard {
     );
   }
 
-
-    MemberCard.fromMap(Map<String, dynamic> map)
+  // fromMapコンストラクタも修正
+  MemberCard.fromMap(Map<String, dynamic> map)
     : cost = map['cost'] ?? 0,
-      hearts = _parseHearts(map['hearts']), // data_jsonから取得
+      hearts = _parseHearts(map['hearts']), 
       blades = map['blades'] ?? 0,
       bladeHearts = _parseBladeHearts(map['bladeHearts'] ?? map['blade_hearts']),
       effect = map['effect'] ?? '',
       super(
         id: map['id'] ?? 0,
         cardCode: map['card_code'] ?? '',
-        rarity: map['rarity'] ?? '',
+        rarity: _parseRarity(map['rarity']),    // Rarity enumパース
         productSet: map['product_set'] ?? '',
         name: map['name'] ?? '',
         series: _parseSeriesName(map['series']),
@@ -123,7 +129,23 @@ class MemberCard extends BaseCard {
         imageUrl: map['image_url'] ?? '',
       );
   
-  // heartsパース処理の修正
+  // レアリティパースヘルパー（新規追加）
+  static Rarity _parseRarity(dynamic rarityData) {
+    if (rarityData == null) return Rarity.n;
+    
+    if (rarityData is String) {
+      return Rarity.fromString(rarityData);
+    }
+    
+    // enum値が直接渡された場合
+    if (rarityData is Rarity) {
+      return rarityData;
+    }
+    
+    return Rarity.n; // デフォルト
+  }
+  
+  // 既存のヘルパーメソッドはそのまま維持
   static List<Heart> _parseHearts(dynamic heartsData) {
     print('=== Hearts解析開始 ===');
     print('入力データ: $heartsData');
@@ -295,7 +317,8 @@ static HeartColor _parseHeartColor(String? colorStr) {
   }
 
   // SeriesNameパースヘルパー
-  static SeriesName _parseSeriesName(String seriesStr) {
+  static SeriesName _parseSeriesName(String? seriesStr) {
+    if (seriesStr == null) return SeriesName.lovelive;
     return SeriesName.values.firstWhere(
       (e) => e.toString().split('.').last == seriesStr,
       orElse: () => SeriesName.lovelive,
